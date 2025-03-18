@@ -9,7 +9,7 @@
  * 4. Spawn a thread to receive and display the updated game state from the server.
  *
  * Compile:
- *   gcc client.c -o client -pthread
+ *   gcc client.c -o client -pthread    
  *
  * Usage:
  *   ./client <SERVER_IP> <PORT>
