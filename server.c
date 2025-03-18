@@ -29,7 +29,7 @@
 #define MAX_CLIENTS 4
 #define BUFFER_SIZE 1024
 
-/* Example grid size */
+/* Grid dimensions */
 #define GRID_ROWS 5
 #define GRID_COLS 5
 
@@ -37,49 +37,48 @@
  * Data Structures
  *---------------------------------------------------------------------------*/
 
-/* Player structure (you may add fields like HP, etc.) */
+/* Player structure */
 typedef struct {
-    int x, y;       // position on the grid
-    int active;     // 1 if active, 0 otherwise
-    // TODO: Add more fields if needed (e.g., HP)
+    int x, y;       // current position
+    int hp;         // health points
+    int active;     // 1 if this player slot is used, 0 otherwise
 } Player;
 
-/* GameState structure, storing the grid and players */
+/* Game state: grid + players + count */
 typedef struct {
-    char grid[GRID_ROWS][GRID_COLS];
+    char grid[GRID_ROWS][GRID_COLS];  // '.' for empty, '#' for obstacle, or 'A'/'B'/'C'/'D'
     Player players[MAX_CLIENTS];
-    int clientCount;
+    int clientCount;                  // how many players are connected
 } GameState;
 
 /* Global game state */
 GameState g_gameState;
 
-/* Store each client's socket (index = player ID) */
+/* Store each client's socket; index corresponds to a player ID (0..3) */
 int g_clientSockets[MAX_CLIENTS];
 
-/* If you want to protect the shared state, use a mutex */
+/* Mutex to protect shared game state (recommended for thread safety) */
 pthread_mutex_t g_stateMutex = PTHREAD_MUTEX_INITIALIZER;
 
-/*---------------------------------------------------------------------------*
- * TODO: Initialize the game state
- *  - Clear the grid
- *  - Place obstacles (#)
- *  - Reset players
- *---------------------------------------------------------------------------*/
+
 void initGameState() {
-    // Example: fill with '.'
+    // Fill the grid with '.'
     for (int r = 0; r < GRID_ROWS; r++) {
         for (int c = 0; c < GRID_COLS; c++) {
             g_gameState.grid[r][c] = '.';
         }
     }
 
-    // TODO: Place some obstacles, e.g. g_gameState.grid[2][2] = '#';
+    // Example: place some obstacles
+    // (Feel free to add more or randomize them)
+    g_gameState.grid[2][2] = '#';
+    g_gameState.grid[1][3] = '#';
 
-    // Reset players array
+    // Initialize players
     for (int i = 0; i < MAX_CLIENTS; i++) {
         g_gameState.players[i].x = -1;
         g_gameState.players[i].y = -1;
+        g_gameState.players[i].hp = 100;
         g_gameState.players[i].active = 0;
         g_clientSockets[i] = -1;
     }
@@ -88,13 +87,28 @@ void initGameState() {
 }
 
 /*---------------------------------------------------------------------------*
- * TODO: Refresh the grid to place each active player
- *  - Clear old positions (except obstacles)
- *  - Mark each player in the grid (e.g. 'A'+i)
+ * Refresh the grid with current player positions.
+ * We clear old player marks (leaving obstacles) and re-place them according
+ * to the players' (x,y).
  *---------------------------------------------------------------------------*/
 void refreshPlayerPositions() {
-    // 1. Clear non-obstacle cells (set them to '.')
-    // 2. For each active player, place a character on the grid
+    // Clear all non-obstacle cells
+    for (int r = 0; r < GRID_ROWS; r++) {
+        for (int c = 0; c < GRID_COLS; c++) {
+            if (g_gameState.grid[r][c] != '#') {
+                g_gameState.grid[r][c] = '.';
+            }
+        }
+    }
+
+    // Place each active player's symbol
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (g_gameState.players[i].active && g_gameState.players[i].hp > 0) {
+            int px = g_gameState.players[i].x;
+            int py = g_gameState.players[i].y;
+            g_gameState.grid[px][py] = 'A' + i; // 'A', 'B', 'C', 'D'
+        }
+    }
 }
 
 /*---------------------------------------------------------------------------*
@@ -132,14 +146,32 @@ void handleCommand(int playerIndex, const char *cmd) {
     // Lock state if needed
     pthread_mutex_lock(&g_stateMutex);
 
-    // Example:
-    // if (strncmp(cmd, "MOVE", 4) == 0) { ... }
+    if (strncmp(cmd, "MOVE", 4) == 0) {
+        // Example commands: MOVE UP, MOVE DOWN, MOVE LEFT, MOVE RIGHT
+        if (strstr(cmd, "UP")) {
+            int nx = g_gameState.players[playerIndex].x - 1;
+            int ny = g_gameState.players[playerIndex].y;
+            if (nx >= 0 && g_gameState.grid[nx][ny] != '#') {
+                g_gameState.players[playerIndex].x = nx;
+            }
+        } else if (strstr(cmd, "DOWN")) {
+            int nx = g_gameState.players[playerIndex].x + 1;
+            int ny = g_gameState.players[playerIndex].y;
+            if (nx < GRID_ROWS && g_gameState.grid[nx][ny] != '#') {
+                g_gameState.players[playerIndex].x = nx;
+            }
+        }
+        // else if (strstr(cmd, "LEFT")) { ... }
+        // else if (strstr(cmd, "RIGHT")) { ... }
+    }
     // else if (strncmp(cmd, "ATTACK", 6) == 0) { ... }
     // else if (strncmp(cmd, "QUIT", 4) == 0) { ... }
 
-    // refreshPlayerPositions();
-    // broadcastState();
+    // Refresh positions and broadcast
+    refreshPlayerPositions();
+    broadcastState();
 
+    // Unlock
     pthread_mutex_unlock(&g_stateMutex);
 }
 
@@ -167,18 +199,31 @@ void *clientHandler(void *arg) {
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         // TODO: recv from clientSocket
-        // ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        // if (bytesRead <= 0) {
-        //     // disconnected
-        //     break;
-        // }
-        // handleCommand(playerIndex, buffer);
-        // check if QUIT => break?
+        // ...
+
+        // Strip trailing newline (if any)
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len - 1] == '\n') {
+            buffer[len - 1] = '\0';
+        }
+
+        // Handle the command
+        handleCommand(playerIndex, buffer);
+
+        // If the player used QUIT in handleCommand, we can also break here:
+        pthread_mutex_lock(&g_stateMutex);
+        if (g_gameState.players[playerIndex].active == 0) {
+            pthread_mutex_unlock(&g_stateMutex);
+            break;
+        }
+        pthread_mutex_unlock(&g_stateMutex);
     }
 
-    // Cleanup after disconnect
+    // Cleanup on disconnect
+    printf("Player %c disconnected.\n", 'A' + playerIndex);
     close(clientSocket);
 
+    // Mark inactive
     pthread_mutex_lock(&g_stateMutex);
     g_clientSockets[playerIndex] = -1;
     g_gameState.players[playerIndex].active = 0;
