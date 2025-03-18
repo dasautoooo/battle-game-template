@@ -2,12 +2,16 @@
 
 ## Overview
 
-This assignment requires you to implement a **client-server** ASCII-based game in C, using **TCP sockets**.  
+This assignment requires you to implement a **client-server** ASCII-based game using **TCP sockets**.  
 You will:
 1. **Design an application-level protocol** (how clients and server exchange messages).
 2. **Implement the socket code** (on both the server and client side).
-3. **Manage concurrency** on the server (using threads or I/O multiplexing).
+3. **Manage concurrency** on the server (e.g., using threads or I/O multiplexing).
 4. **Implement game logic** for a simple “battle” scenario with movement, attacks, and obstacles.
+
+You may complete this assignment in **C** or **Python** (both templates are provided).
+
+---
 
 ## Requirements
 
@@ -40,14 +44,12 @@ You will:
     - More advanced attacking.
     - Security checks (e.g., invalid commands).
 
-## Instructions
+---
+
+## Instructions (C Version)
 
 1. Open `server.c` and `client.c`.
-2. Complete all **`TODO`** sections:
-    - Socket initialization (server & client).
-    - Protocol handling (`handleCommand`, reading/writing messages, etc.).
-    - Game logic (movement rules, obstacles, HP mechanics, etc.).
-
+2. Complete all **`TODO`** sections.
 3. **Compile**:
    ```bash
    # Server
@@ -72,10 +74,21 @@ You will:
     # Terminal 2..N: start clients
     ./client 127.0.0.1 12345
     ```
+   
+---
 
-5. **Test your game**:
-- Connect multiple clients.
-- Try commands like `MOVE UP`, `ATTACK`, `QUIT`.
-- Observe the shared state updates.
+## Instructions (Python Version)
+
+1. Open `server.py` and `client.py`.
+2. Complete all **TODO** sections.
+3. **Run**:
+```shell
+# Server
+python server.py 12345
+
+# Client
+python client.py 127.0.0.1 12345
+```
+Where `12345` is your chosen port, and `127.0.0.1` is the server IP (local host).
 
 **Have fun building your networked ASCII Battle Game!**
